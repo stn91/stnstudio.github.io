@@ -1321,6 +1321,115 @@
             outline: 2px solid white;
             outline-offset: 2px;
         }
+
+        /* ===== 悬浮音乐播放器样式 ===== */
+        .music-player {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 9999;
+            transition: var(--transition);
+        }
+
+        .music-toggle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: var(--shadow-xl);
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            min-width: 60px;
+            min-height: 60px;
+        }
+
+        .music-toggle:hover {
+            transform: scale(1.1) rotate(5deg);
+            box-shadow: 0 8px 24px rgba(37, 99, 235, 0.4);
+        }
+
+        .music-toggle:active {
+            transform: scale(0.95);
+        }
+
+        .music-toggle::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+        }
+
+        .music-toggle:hover::before {
+            transform: translateX(100%);
+        }
+
+        .music-tooltip {
+            position: absolute;
+            bottom: 70px;
+            right: 0;
+            background: var(--dark);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            white-space: nowrap;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: var(--transition);
+            pointer-events: none;
+            box-shadow: var(--shadow-md);
+        }
+
+        .music-tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            right: 25px;
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 8px solid var(--dark);
+        }
+
+        .music-player:hover .music-tooltip {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            .music-player {
+                bottom: 20px;
+                right: 20px;
+            }
+            
+            .music-toggle {
+                width: 50px;
+                height: 50px;
+                font-size: 1.25rem;
+                min-width: 50px;
+                min-height: 50px;
+            }
+        }
+
+        /* 音频加载提示 */
+        .music-loading {
+            animation: spin 1s linear infinite;
+        }
     </style>
 </head>
 <body>
@@ -1827,6 +1936,14 @@
         </div>
     </div>
 
+    <!-- 悬浮音乐播放器 -->
+    <div class="music-player" id="musicPlayer">
+        <button class="music-toggle" id="musicToggle" aria-label="播放/暂停音乐">
+            <i class="fas fa-play" id="musicIcon"></i>
+        </button>
+        <div class="music-tooltip" id="musicTooltip">点击播放音乐</div>
+    </div>
+
     <!-- 页脚 -->
     <footer>
         <div class="footer-content">
@@ -2181,8 +2298,147 @@
             }
         };
 
+        // ===== 音乐播放器功能 =====
+        function initMusicPlayer() {
+            const audio = new Audio('./music.mp3');
+            const musicToggle = document.getElementById('musicToggle');
+            const musicIcon = document.getElementById('musicIcon');
+            const musicTooltip = document.getElementById('musicTooltip');
+            let isPlaying = false;
+            let autoPlayTimeout = null;
+            
+            // 配置音频
+            audio.volume = 0.2; // 设置为20%音量
+            audio.loop = true; // 循环播放
+            
+            // 播放/暂停切换
+            function togglePlay() {
+                if (isPlaying) {
+                    audio.pause();
+                    musicIcon.classList.remove('fa-pause');
+                    musicIcon.classList.add('fa-play');
+                    musicTooltip.textContent = '点击播放音乐';
+                } else {
+                    audio.play().then(() => {
+                        musicIcon.classList.remove('fa-play');
+                        musicIcon.classList.add('fa-pause');
+                        musicTooltip.textContent = '点击暂停音乐';
+                    }).catch(err => {
+                        console.log('播放失败:', err);
+                        musicTooltip.textContent = '请点击以播放音乐';
+                        // 显示用户交互提示
+                        showMusicInteractionPrompt();
+                    });
+                }
+                isPlaying = !isPlaying;
+            }
+            
+            // 点击事件
+            musicToggle.addEventListener('click', togglePlay);
+            
+            // 5秒延迟自动播放（需要用户先交互）
+            function attemptAutoPlay() {
+                // 检查是否已经与页面交互
+                if (document.hasInteraction) {
+                    audio.play().then(() => {
+                        isPlaying = true;
+                        musicIcon.classList.remove('fa-play');
+                        musicIcon.classList.add('fa-pause');
+                        musicTooltip.textContent = '点击暂停音乐';
+                    }).catch(err => {
+                        console.log('自动播放被阻止:', err);
+                        // 显示交互提示
+                        showMusicInteractionPrompt();
+                    });
+                } else {
+                    // 如果没有交互，显示提示
+                    showMusicInteractionPrompt();
+                }
+            }
+            
+            // 自动播放超时
+            autoPlayTimeout = setTimeout(attemptAutoPlay, 5000);
+            
+            // 监听用户首次交互
+            let hasInteracted = false;
+            const interactionHandler = () => {
+                if (!hasInteracted) {
+                    hasInteracted = true;
+                    document.hasInteraction = true;
+                    
+                    // 清除自动播放超时
+                    clearTimeout(autoPlayTimeout);
+                    
+                    // 尝试立即播放
+                    setTimeout(() => {
+                        audio.play().then(() => {
+                            isPlaying = true;
+                            musicIcon.classList.remove('fa-play');
+                            musicIcon.classList.add('fa-pause');
+                            musicTooltip.textContent = '点击暂停音乐';
+                        }).catch(err => {
+                            console.log('交互后播放失败:', err);
+                        });
+                    }, 100);
+                    
+                    // 移除事件监听器
+                    document.removeEventListener('click', interactionHandler);
+                    document.removeEventListener('touchstart', interactionHandler);
+                    document.removeEventListener('keydown', interactionHandler);
+                }
+            };
+            
+            // 添加交互事件监听
+            document.addEventListener('click', interactionHandler, { once: true });
+            document.addEventListener('touchstart', interactionHandler, { once: true });
+            document.addEventListener('keydown', interactionHandler, { once: true });
+            
+            // 音频加载完成
+            audio.addEventListener('canplaythrough', () => {
+                console.log('音乐加载完成');
+            });
+            
+            // 音频错误处理
+            audio.addEventListener('error', (e) => {
+                console.error('音频加载失败:', e);
+                musicTooltip.textContent = '音乐文件加载失败';
+                musicToggle.style.opacity = '0.5';
+                musicToggle.style.pointerEvents = 'none';
+            });
+            
+            // 显示交互提示
+            function showMusicInteractionPrompt() {
+                // 创建提示气泡
+                const prompt = document.createElement('div');
+                prompt.innerHTML = '点击按钮播放背景音乐';
+                prompt.style.cssText = `
+                    position: fixed;
+                    bottom: 100px;
+                    right: 30px;
+                    background: var(--dark);
+                    color: white;
+                    padding: 0.75rem 1rem;
+                    border-radius: 8px;
+                    font-size: 0.875rem;
+                    box-shadow: var(--shadow-lg);
+                    z-index: 10000;
+                    animation: fadeIn 0.3s ease;
+                `;
+                document.body.appendChild(prompt);
+                
+                // 3秒后自动隐藏
+                setTimeout(() => {
+                    prompt.style.animation = 'fadeOut 0.3s ease';
+                    setTimeout(() => prompt.remove(), 300);
+                }, 3000);
+            }
+        }
+
         // ===== 初始化 =====
-        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('DOMContentLoaded', () => {
+            init();
+            initMusicPlayer(); // 添加音乐播放器初始化
+        });
         
         // ESC键关闭所有模态框
         document.addEventListener('keydown', (e) => {
